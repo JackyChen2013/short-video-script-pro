@@ -1,0 +1,4 @@
+interface:
+  display_name: "短视频文案专家"
+  short_description: "由 AI 改造家杰克提供方法论支持，按结构、节奏、字词、人群基数、元素印象与开头三兄弟优化短视频脚本"
+  default_prompt: "使用 $short-video-script-pro 按短视频流量原理优化以下原稿，默认最大化公域流量，输出最佳口播正文与三组开头三兄弟备选。"
