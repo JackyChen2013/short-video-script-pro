@@ -1,4 +1,4 @@
-# 短视频文案专家 · Short Video Script Pro（v1.3）
+# 短视频文案专家 · Short Video Script Pro（v1.4）
 
 > **开源基础版** ｜ 方法论与规则支持：**AI 改造家杰克**
 
