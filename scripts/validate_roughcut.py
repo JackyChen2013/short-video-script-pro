@@ -17,7 +17,7 @@ from pathlib import Path
 
 TIMESTAMP_RE = re.compile(r"\[?\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?\s*(?:-->|-|–)\s*\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,3})?\]?")
 HEADER_LINE_RE = re.compile(r"^(?:#\s+|原文件|原文件\s*SHA|时间点对应|机器识别稿)")
-SPEAKER_PREFIX_RE = re.compile(r"^(?:[（(][^）)]{1,12}[）)]|[A-Za-z\u4e00-\u9fff0-9]{1,10}\s*[：:])\s*")
+SPEAKER_PREFIX_RE = re.compile(r"^(?:[（(][^）)]{1,12}[）)]|(?:记者|主持|主持人|嘉宾|受访人|主讲人|提问|回答|说话人\s*\d+|Speaker\s*\d+)\s*[：:])\s*")
 INLINE_NOTE_RE = re.compile(r"\[[^\]]*待核听[^\]]*\]")
 
 
