@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+"""Validate delivery markdown fields, first-sentence alignment, and optional Mode A source check."""
 import argparse
 import json
 import re
 from collections import Counter
 from pathlib import Path
 from typing import Optional
+
+from validate_roughcut import apply_asr_map, normalized, strip_metadata
 
 
 REQUIRED_FIELDS = (
@@ -15,14 +18,13 @@ REQUIRED_FIELDS = (
     "开头第一句",
 )
 
-
-def normalized(text: str) -> str:
-    return "".join(re.findall(r"[\u3400-\u9fffA-Za-z0-9]", text))
+BODY_HEADING_RE = re.compile(r"(?m)^###\s*(?:完整口播正文|粗剪正文|完整粗剪正文)[^\n]*$")
+NEXT_SECTION_RE = re.compile(r"(?m)^(?:---|###\s+|-\s*待核对词：|-\s*待核听疑点：|>\s*提示：)")
 
 
 def split_sections(text: str) -> list[tuple[str, str]]:
     matches = list(re.finditer(r"(?m)^## (?!#)(.+)$", text))
-    numbered = [match for match in matches if re.match(r"\d+｜", match.group(1))]
+    numbered = [match for match in matches if re.match(r"(?:C?\d+[｜|]|\d+｜)", match.group(1))]
     if not numbered:
         return [("single", text)]
     sections = []
@@ -33,16 +35,16 @@ def split_sections(text: str) -> list[tuple[str, str]]:
 
 
 def field_value(section: str, field: str) -> Optional[str]:
-    match = re.search(rf"(?m)^- {re.escape(field)}：\s*(.+)$", section)
+    match = re.search(rf"(?m)^(?:\s*[-*]\s*){re.escape(field)}：\s*(.+)$", section)
     return match.group(1).strip() if match else None
 
 
 def body_text(section: str) -> str:
-    match = re.search(r"(?m)^### 粗剪正文\s*$", section)
+    match = BODY_HEADING_RE.search(section)
     if not match:
         return ""
     body = section[match.end():]
-    body = re.split(r"(?m)^---\s*$", body, maxsplit=1)[0]
+    body = NEXT_SECTION_RE.split(body, maxsplit=1)[0]
     return body.strip()
 
 
@@ -50,27 +52,39 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--delivery", required=True)
     parser.add_argument("--source")
+    parser.add_argument("--asr-map")
     args = parser.parse_args()
 
     text = Path(args.delivery).read_text(encoding="utf-8")
-    source_chars = normalized(
-        Path(args.source).read_text(encoding="utf-8")
-    ) if args.source else None
+    asr_map: dict[str, str] = {}
+    if args.asr_map:
+        asr_map = {str(k): str(v) for k, v in json.loads(Path(args.asr_map).read_text(encoding="utf-8")).items()}
+
+    source_chars = None
+    if args.source:
+        cleaned_source = strip_metadata(Path(args.source).read_text(encoding="utf-8"), is_source=True)
+        source_chars = normalized(apply_asr_map(cleaned_source, asr_map))
+
     results = []
     failed = False
 
     for title, section in split_sections(text):
         missing = [field for field in REQUIRED_FIELDS if not field_value(section, field)]
         body = body_text(section)
-        body_lines = [line.strip() for line in body.splitlines() if line.strip()]
+        cleaned_body = strip_metadata(body, is_source=False)
+        body_lines = [line.strip() for line in cleaned_body.splitlines() if line.strip()]
         first = field_value(section, "开头第一句") or ""
-        first_matches = bool(body_lines) and normalized(first) == normalized(body_lines[0])
+        first_norm = normalized(strip_metadata(first, is_source=False))
+        first_body_norm = normalized(body_lines[0]) if body_lines else ""
+        first_matches = bool(first_norm) and bool(first_body_norm) and (
+            first_norm == first_body_norm or first_body_norm.startswith(first_norm)
+        )
         normalized_lines = [normalized(line) for line in body_lines if normalized(line)]
         duplicates = sorted(
             {line for line in normalized_lines if normalized_lines.count(line) > 1}
         )
         extra_characters = (
-            dict(Counter(normalized(body)) - Counter(source_chars))
+            dict(Counter(normalized(cleaned_body)) - Counter(source_chars))
             if source_chars is not None else {}
         )
         errors = []
@@ -88,7 +102,7 @@ def main() -> None:
         results.append({
             "section": title,
             "missing_fields": missing,
-            "body_characters": len(normalized(body)),
+            "body_characters": len(normalized(cleaned_body)),
             "first_sentence_matches_body": first_matches,
             "duplicate_body_lines": duplicates,
             "source_character_check": not extra_characters,
